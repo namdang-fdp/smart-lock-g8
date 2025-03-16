@@ -286,7 +286,8 @@ bool checkPassword() {
       Serial.println("Mật khẩu đúng!");
       lcd.clear();
       lcd.print("Access Granted");
-      delay(2000);
+      delay(5000);
+      lcd.print("Press button to restart");
       return true;
     } else {
       pwdAttempts++;
