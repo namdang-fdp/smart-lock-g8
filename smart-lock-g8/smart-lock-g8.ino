@@ -6,6 +6,22 @@
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
 
+// Thêm thư viện cho WiFi và Telegram
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+
+//======================
+// CẤU HÌNH WiFi & Telegram
+//======================
+const char* ssid = "Nhat Nam_2.4G";
+const char* wifiPassword = "nhatnam0811";
+const char* BOT_TOKEN = "7290998230:AAGi2WAFE0QgAWh-FmmyhAU5sRyGVbkFMbc";
+const char* CHAT_ID = "-4793674715";  // Giữ nguyên dấu '-' nếu có
+
+WiFiClientSecure secured_client;
+UniversalTelegramBot telegramBot(BOT_TOKEN, secured_client);
+
 //======================
 // CẤU HÌNH LCD I2C
 //======================
@@ -48,8 +64,8 @@ char keys[ROWS][COLS] = {
   {'7','8','9','C'},
   {'*','0','#','D'}
 };
-byte rowPins[ROWS] = {13, 14, 27, 26};  // Ví dụ: các chân cho hàng
-byte colPins[COLS] = {15, 25, 32, 33};   // Ví dụ: các chân cho cột
+byte rowPins[ROWS] = {13, 14, 27, 26};  // Các chân cho hàng
+byte colPins[COLS] = {15, 25, 32, 33};   // Các chân cho cột
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 //======================
@@ -57,9 +73,96 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 //======================
 String systemPassword = "";  // Nếu rỗng, chưa đăng ký
 
+//======================
+// Global biến lưu OTP
+//======================
+String currentOTP = "";
+
 //=====================================================
-// Hàm enrollFinger: đăng ký vân tay và lưu vào slot id
+// Hàm generateOTP: tạo OTP ngẫu nhiên 6 chữ số
 //=====================================================
+String generateOTP() {
+  int otp = random(100000, 1000000);
+  return String(otp);
+}
+
+//=====================================================
+// Hàm sendOTPViaTelegram: gửi OTP đến người dùng qua Telegram Bot
+//=====================================================
+bool sendOTPViaTelegram(String otp) {
+  String message = "Your OTP is: " + otp;
+  if (telegramBot.sendMessage(CHAT_ID, message, "")) {
+    Serial.println("OTP sent via Telegram!");
+    return true;
+  } else {
+    Serial.println("Error sending OTP via Telegram!");
+    return false;
+  }
+}
+
+//=====================================================
+// Hàm getKeypadInput: đọc OTP nhập từ Keypad (giả sử OTP có 6 ký tự)
+//=====================================================
+String getKeypadInput() {
+  String input = "";
+  lcd.clear();
+  lcd.print("Enter OTP:");
+  lcd.setCursor(0, 1);
+  while (input.length() < 6) {
+    char key = keypad.getKey();
+    if (key != NO_KEY) {
+      input += key;
+      lcd.print("*");  // hiển thị dấu *
+      delay(300);
+    }
+  }
+  return input;
+}
+
+//=====================================================
+// Hàm checkOTP: yêu cầu nhập OTP qua Keypad, cho phép 5 lần thử
+//=====================================================
+bool checkOTP() {
+  // Tạo OTP và gửi qua Telegram
+  currentOTP = generateOTP();
+  Serial.print("Generated OTP: ");
+  Serial.println(currentOTP);
+  if (!sendOTPViaTelegram(currentOTP)) {
+    lcd.clear();
+    lcd.print("OTP send Err");
+    delay(2000);
+    return false;
+  }
+  
+  const int maxOtpAttempts = 5;
+  int otpAttempts = 0;
+  while (otpAttempts < maxOtpAttempts) {
+    lcd.clear();
+    lcd.print("Enter OTP:");
+    String enteredOTP = getKeypadInput();
+    Serial.print("Entered OTP: ");
+    Serial.println(enteredOTP);
+    if (enteredOTP == currentOTP) {
+      lcd.clear();
+      lcd.print("OTP Correct");
+      delay(2000);
+      return true;
+    } else {
+      otpAttempts++;
+      lcd.clear();
+      lcd.print("OTP Incorrect");
+      delay(2000);
+    }
+  }
+  return false;
+}
+
+//=====================================================
+// Các hàm enrollFinger, clearAllFingerprints, initFingerprintSystem, getFingerprintID, checkRFID,
+// registerPassword, checkPassword
+// (Giữ nguyên code của bạn như đã cung cấp)
+//=====================================================
+
 uint8_t enrollFinger(uint8_t id) {
   int p = 0;
   Serial.println("Vui lòng đặt ngón tay (lần 1)...");
@@ -122,9 +225,6 @@ uint8_t enrollFinger(uint8_t id) {
   return FINGERPRINT_OK;
 }
 
-//=====================================================
-// Hàm clearAllFingerprints: xóa tất cả mẫu vân tay (ID 1-127)
-//=====================================================
 void clearAllFingerprints() {
   Serial.println("Đang xóa tất cả mẫu vân tay...");
   lcd.clear();
@@ -150,9 +250,6 @@ void clearAllFingerprints() {
   delay(2000);
 }
 
-//=====================================================
-// Hàm initFingerprintSystem: xóa mẫu cũ và nếu chưa có mẫu thì enroll mới
-//=====================================================
 void initFingerprintSystem() {
   clearAllFingerprints();
   finger.getTemplateCount();
@@ -183,9 +280,6 @@ void initFingerprintSystem() {
   }
 }
 
-//=====================================================
-// Hàm getFingerprintID: quét và xác thực vân tay, trả về ID nếu thành công, -1 nếu thất bại
-//=====================================================
 uint8_t getFingerprintID() {
   uint8_t p = finger.getImage();
   if (p != FINGERPRINT_OK) return p;
@@ -196,14 +290,10 @@ uint8_t getFingerprintID() {
   return finger.fingerID;
 }
 
-//=====================================================
-// Hàm checkRFID: kiểm tra xem thẻ RFID có đúng không
-//=====================================================
 bool checkRFID() {
   if (!mfrc522.PICC_IsNewCardPresent()) return false;
   if (!mfrc522.PICC_ReadCardSerial()) return false;
   
-  // So sánh UID
   if (mfrc522.uid.size != sizeof(authorizedRFID)) return false;
   for (byte i = 0; i < mfrc522.uid.size; i++) {
     if (mfrc522.uid.uidByte[i] != authorizedRFID[i]) return false;
@@ -211,25 +301,21 @@ bool checkRFID() {
   return true;
 }
 
-//=====================================================
-// Hàm registerPassword: đăng ký mật khẩu lần đầu qua Keypad
-//=====================================================
 void registerPassword() {
   lcd.clear();
   lcd.print("Set Password:");
-  Serial.println("Vui lòng nhập mật khẩu (4 số):");
+  Serial.println("Nhập mật khẩu (4 số):");
   String pwd = "";
   while (pwd.length() < 4) {
     char key = keypad.getKey();
     if (key != NO_KEY) {
       pwd += key;
-      Serial.print(key);  // in ra Serial để debug
+      Serial.print(key);
       lcd.setCursor(pwd.length()-1, 1);
-      lcd.print("*");     // hiển thị dấu *
+      lcd.print("*");
       delay(300);
     }
   }
-  // Yêu cầu xác nhận mật khẩu
   lcd.clear();
   lcd.print("Confirm:");
   Serial.println("\nXác nhận mật khẩu:");
@@ -259,10 +345,6 @@ void registerPassword() {
   }
 }
 
-//=====================================================
-// Hàm checkPassword: xác thực mật khẩu qua Keypad
-// Cho phép 5 lần thử, nếu sai quá 5 lần thì trả về false.
-//=====================================================
 bool checkPassword() {
   const int maxPwdAttempts = 5;
   int pwdAttempts = 0;
@@ -285,7 +367,7 @@ bool checkPassword() {
     if (entered == systemPassword) {
       Serial.println("Mật khẩu đúng!");
       lcd.clear();
-      lcd.print("Access Granted");
+      lcd.print("Pwd Correct");
       delay(5000);
       lcd.print("Press button to restart");
       return true;
@@ -294,15 +376,16 @@ bool checkPassword() {
       Serial.print("Mật khẩu sai. Lần thử: ");
       Serial.println(pwdAttempts);
       lcd.clear();
-      lcd.print("Invalid Password");
+      lcd.print("Pwd Incorrect");
       delay(2000);
     }
   }
   return false;
 }
 
+
 //=====================================================
-// Hàm securityCheck: lớp bảo mật gồm RFID, Fingerprint và Keypad Password
+// Hàm securityCheck: lớp bảo mật gồm RFID, FP, Password và OTP
 //=====================================================
 bool securityCheck() {
   // Kiểm tra thẻ RFID
@@ -362,6 +445,15 @@ bool securityCheck() {
     return false;
   }
   
+  // Kiểm tra OTP qua Keypad
+  if (!checkOTP()) {
+    Serial.println("OTP không khớp sau 5 lần thử.");
+    lcd.clear();
+    lcd.print("Restart process");
+    delay(3000);
+    return false;
+  }
+  
   return true;
 }
 
@@ -371,7 +463,16 @@ bool securityCheck() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("Khởi tạo hệ thống bảo mật (RFID, FP, Keypad)...");
+  Serial.println("Khởi tạo hệ thống bảo mật (RFID, FP, Keypad, OTP)...");
+  
+  // Kết nối WiFi
+  WiFi.begin(ssid, wifiPassword);
+  while(WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi đã kết nối. IP: " + WiFi.localIP().toString());
+  secured_client.setInsecure();
   
   // Khởi tạo LCD sử dụng lcd.begin()
   lcd.begin();
@@ -388,7 +489,7 @@ void setup() {
   SPI.begin();
   mfrc522.PCD_Init();
   Serial.println("RFID đã khởi tạo");
-
+  
   // Khởi tạo fingerprint sensor
   fingerSerial.begin(57600, SERIAL_8N1, FINGER_RX, FINGER_TX);
   delay(100);
@@ -405,7 +506,7 @@ void setup() {
   // Khởi tạo Keypad (thư viện Keypad tự khởi tạo qua đối tượng)
   Serial.println("Keypad đã khởi tạo");
 
-  // Đăng ký mật khẩu nếu lần đầu (nếu systemPassword rỗng)
+  // Đăng ký mật khẩu nếu chưa có
   if (systemPassword == "") {
     Serial.println("Chưa có mật khẩu. Đăng ký mật khẩu...");
     lcd.clear();
@@ -425,22 +526,21 @@ void setup() {
 // LOOP
 //=====================================================
 void loop() {
-  // Kiểm tra và thực hiện lớp bảo mật: RFID, FP, và Keypad
+  // Thực hiện lớp bảo mật: RFID, FP, Password và OTP
   if (securityCheck()) {
     Serial.println("Truy cập được cấp phép!");
     lcd.clear();
     lcd.print("Access Granted");
-    // Sau khi xác thực thành công, hệ thống không kiểm tra thêm
-    while (true) {
-      // Nếu muốn khởi động lại hệ thống, chờ nút reset được nhấn
-      if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-        Serial.println("Reset button pressed. Restarting security process...");
-        lcd.clear();
-        lcd.print("Restarting...");
-        delay(1000);
-        break;
-      }
+    // Sau khi xác thực thành công, hệ thống dừng kiểm tra
+    Serial.println("Nhấn nút reset để bật lại hệ thống bảo mật.");
+    lcd.clear();
+    lcd.print("Press Button");
+    while (digitalRead(RESET_BUTTON_PIN) == HIGH) {
       delay(100);
     }
+    Serial.println("Reset button pressed. Restarting security process...");
+    lcd.clear();
+    lcd.print("Restarting...");
+    delay(1000);
   }
 }
