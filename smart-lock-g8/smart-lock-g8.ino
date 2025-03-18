@@ -49,7 +49,7 @@ char keys[ROWS][COLS] = {
 byte rowPins[ROWS] = {13, 14, 27, 26};
 byte colPins[COLS] = {15, 25, 32, 33};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
-
+#define LED_PIN 3  // Sử dụng RX0, thông thường là GPIO3
 //========= Lưu mật khẩu hệ thống (giữ nguyên) =========
 String systemPassword = "";
 
@@ -471,6 +471,9 @@ void setup() {
   Serial.println("Hệ thống bảo mật sẵn sàng. Quẹt thẻ RFID để xác thực...");
   lcd.clear();
   lcd.print("Scan RFID");
+  // Khởi tạo LED
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW); 
 }
 
 //=====================================================
@@ -487,6 +490,7 @@ void loop() {
     digitalWrite(RELAY_PIN, LOW);  
     lcd.setCursor(0, 1);
     lcd.print("Door Unlocked");
+    digitalWrite(LED_PIN, HIGH);
 
     // Chờ nút reset để khởi động lại quá trình bảo mật
     Serial.println("Nhấn nút reset để bật lại hệ thống bảo mật.");
@@ -495,6 +499,7 @@ void loop() {
     }
     // Khi người dùng nhấn nút reset => quay về trạng thái ban đầu (đóng cửa)
     digitalWrite(RELAY_PIN, HIGH); 
+    digitalWrite(LED_PIN, LOW);
     lcd.clear();
     lcd.print("Door Locked");
     delay(2000);
