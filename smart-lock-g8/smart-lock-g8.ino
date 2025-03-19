@@ -511,37 +511,76 @@ void setup() {
 bool isEmptyHouse = true;
 bool isDoorOpen = false;
 bool haveGuess = false;
+//void loop() {
+//  if (buttonPressed) {
+//        buttonPressed = false;  // Reset flag
+//        if (Door_Locked) {
+//            Serial.println("Door is locked. Stopping authentication and opening the door.");
+//            Door_Locked = false;  // Unlock the door
+//            lcd.clear();
+//            lcd.print("Access Granted");
+//            digitalWrite(RELAY_PIN, LOW); // Mở khóa 
+//            lcd.setCursor(0, 0);
+//            lcd.print("Door Unlocked");
+//            
+//        } if(Door_Locked == false) {
+//            Serial.println("Door is unlocked. Locking the door and restarting authentication.");
+//            Door_Locked = true;  // Lock the door
+//            //isDoorOpen = false;
+//            digitalWrite(RELAY_PIN, HIGH); // Khóa cửa
+//            lcd.clear();
+//            lcd.print("Lock the door!");
+//            delay(2000);  
+//        }
+//        if (securityCheck()) {
+//        lcd.clear();
+//        lcd.print("Access Granted");
+//        digitalWrite(RELAY_PIN, LOW); // Mở khóa 
+//        lcd.setCursor(0, 0);
+//        lcd.print("Door Unlocked");
+//        digitalWrite(LED_PIN, HIGH);
+//        Door_Locked = false;
+//        delay(10000);
+//      
+//  }
+//}
+//}
+
+bool isButtonEnabled = false;
 void loop() {
-  if (buttonPressed) {
-        buttonPressed = false;  // Reset flag
-        if (Door_Locked) {
-            Serial.println("Door is locked. Stopping authentication and opening the door.");
-            Door_Locked = false;  // Unlock the door
-            lcd.clear();
-            lcd.print("Access Granted");
-            digitalWrite(RELAY_PIN, LOW); // Mở khóa 
-            lcd.setCursor(0, 0);
-            lcd.print("Door Unlocked");
-            
-        } else {
-            Serial.println("Door is unlocked. Locking the door and restarting authentication.");
-            Door_Locked = true;  // Lock the door
-            //isDoorOpen = false;
-            digitalWrite(RELAY_PIN, HIGH); // Khóa cửa
-            lcd.clear();
-            lcd.print("Lock the door!");
-            delay(2000);  
-        }
-    } else {
-        if (securityCheck()) {
+    if (securityCheck()) {
+        // Nếu xác thực thành công, mở cửa
         lcd.clear();
         lcd.print("Access Granted");
-        digitalWrite(RELAY_PIN, LOW); // Mở khóa 
+        digitalWrite(RELAY_PIN, LOW); // Mở khóa
         lcd.setCursor(0, 0);
         lcd.print("Door Unlocked");
         digitalWrite(LED_PIN, HIGH);
         Door_Locked = false;
-        delay(10000);
-      }
-  }
+        isButtonEnabled = true; // Cho phép sử dụng button để đóng cửa
+        delay(10000); // Giữ cửa mở 10s (có thể điều chỉnh)
+    }
+
+    if (buttonPressed) { 
+        buttonPressed = false; // Reset flag
+        if (!Door_Locked && isButtonEnabled) {
+            // Nếu cửa đang mở và nút được kích hoạt → Đóng cửa
+            Serial.println("Closing door manually...");
+            digitalWrite(RELAY_PIN, HIGH); // Đóng cửa
+            lcd.clear();
+            lcd.print("Locking the door!");
+            delay(2000);
+            Door_Locked = true;
+            isButtonEnabled = false; // Tắt quyền sử dụng nút khi đã đóng cửa
+        } 
+        else if (Door_Locked) {
+            // Nếu cửa đang khóa mà nút nhấn từ bên trong → mở cửa ngay
+            Serial.println("Button pressed! Bypassing authentication...");
+            digitalWrite(RELAY_PIN, LOW); // Mở khóa
+            lcd.clear();
+            lcd.print("Door Unlocked");
+            Door_Locked = false;
+            isButtonEnabled = true; // Tiếp tục cho phép button đóng cửa
+        }
+    }
 }
