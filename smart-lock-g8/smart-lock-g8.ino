@@ -10,8 +10,8 @@
 #include <UniversalTelegramBot.h>
 
 // Wifi password && telegram token
-const char* ssid = "Nhat Nam_2.4G";
-const char* wifiPassword = "nhatnam0811";
+const char* ssid = "OPPO Reno8";
+const char* wifiPassword = "d29ph9xh";
 const char* BOT_TOKEN = "7290998230:AAGi2WAFE0QgAWh-FmmyhAU5sRyGVbkFMbc";
 const char* CHAT_ID = "-4793674715";
 
@@ -36,8 +36,6 @@ uint8_t authorizedFingerID = 1;
 
 // Toggle button configuration
 #define RESET_BUTTON_PIN 12
-volatile bool buttonPressed = false;
-bool Door_Locked = true; 
 
 // Keypad 4x4 configuration
 const byte ROWS = 4;
@@ -81,16 +79,6 @@ bool sendOTPViaTelegram(String otp) {
     return false;
   }
 }
-
-void IRAM_ATTR handleButtonPress() {
-    static unsigned long lastPressTime = 0;
-    unsigned long currentTime = millis();
-    if (currentTime - lastPressTime > 50) {  // Debounce delay (50ms)
-        buttonPressed = true;
-        lastPressTime = currentTime;
-    }
-}
-
 
 String getKeypadInput() {
   String input = "";
@@ -467,8 +455,6 @@ void setup() {
 
   // LED status is high
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(RESET_BUTTON_PIN), handleButtonPress, FALLING);
-
   pinMode(RELAY_PIN, OUTPUT);
   // Locking at first
   digitalWrite(RELAY_PIN, HIGH); 
@@ -510,77 +496,57 @@ void setup() {
 
 bool isEmptyHouse = true;
 bool isDoorOpen = false;
-bool haveGuess = false;
-//void loop() {
-//  if (buttonPressed) {
-//        buttonPressed = false;  // Reset flag
-//        if (Door_Locked) {
-//            Serial.println("Door is locked. Stopping authentication and opening the door.");
-//            Door_Locked = false;  // Unlock the door
-//            lcd.clear();
-//            lcd.print("Access Granted");
-//            digitalWrite(RELAY_PIN, LOW); // Mở khóa 
-//            lcd.setCursor(0, 0);
-//            lcd.print("Door Unlocked");
-//            
-//        } if(Door_Locked == false) {
-//            Serial.println("Door is unlocked. Locking the door and restarting authentication.");
-//            Door_Locked = true;  // Lock the door
-//            //isDoorOpen = false;
-//            digitalWrite(RELAY_PIN, HIGH); // Khóa cửa
-//            lcd.clear();
-//            lcd.print("Lock the door!");
-//            delay(2000);  
-//        }
-//        if (securityCheck()) {
-//        lcd.clear();
-//        lcd.print("Access Granted");
-//        digitalWrite(RELAY_PIN, LOW); // Mở khóa 
-//        lcd.setCursor(0, 0);
-//        lcd.print("Door Unlocked");
-//        digitalWrite(LED_PIN, HIGH);
-//        Door_Locked = false;
-//        delay(10000);
-//      
-//  }
-//}
-//}
 
-bool isButtonEnabled = false;
 void loop() {
-    if (securityCheck()) {
-        // Nếu xác thực thành công, mở cửa
-        lcd.clear();
-        lcd.print("Access Granted");
-        digitalWrite(RELAY_PIN, LOW); // Mở khóa
-        lcd.setCursor(0, 0);
-        lcd.print("Door Unlocked");
-        digitalWrite(LED_PIN, HIGH);
-        Door_Locked = false;
-        isButtonEnabled = true; // Cho phép sử dụng button để đóng cửa
-        delay(10000); // Giữ cửa mở 10s (có thể điều chỉnh)
-    }
-
-    if (buttonPressed) { 
-        buttonPressed = false; // Reset flag
-        if (!Door_Locked && isButtonEnabled) {
-            // Nếu cửa đang mở và nút được kích hoạt → Đóng cửa
-            Serial.println("Closing door manually...");
-            digitalWrite(RELAY_PIN, HIGH); // Đóng cửa
-            lcd.clear();
-            lcd.print("Locking the door!");
-            delay(2000);
-            Door_Locked = true;
-            isButtonEnabled = false; // Tắt quyền sử dụng nút khi đã đóng cửa
-        } 
-        else if (Door_Locked) {
-            // Nếu cửa đang khóa mà nút nhấn từ bên trong → mở cửa ngay
-            Serial.println("Button pressed! Bypassing authentication...");
-            digitalWrite(RELAY_PIN, LOW); // Mở khóa
-            lcd.clear();
-            lcd.print("Door Unlocked");
-            Door_Locked = false;
-            isButtonEnabled = true; // Tiếp tục cho phép button đóng cửa
+  if (securityCheck()) {
+    // Sau khi xác thực thành công:
+    // Mở khóa cửa (relay LOW) và bật LED (on)
+    digitalWrite(RELAY_PIN, LOW);    // Unlock door
+    digitalWrite(LED_PIN, HIGH);       // Turn on LED
+    lcd.clear();
+    lcd.print("Access Granted");
+    lcd.setCursor(0, 1);
+    lcd.print("Door Unlocked");
+    isEmptyHouse = false;
+    isDoorOpen = true;
+    
+    int resetCount = 0;
+    // Đợi đến khi nhận đủ 2 lần nhấn nút reset
+    while (resetCount < 2) {
+      if (digitalRead(RESET_BUTTON_PIN) == LOW) {
+        resetCount++;
+        // Chờ nút được nhả (debounce)
+        while (digitalRead(RESET_BUTTON_PIN) == LOW) {
+          delay(100);
         }
+        delay(500); // debounce thêm
+        if (resetCount == 1) {
+          // Lần nhấn thứ nhất: đóng cửa nhưng LED vẫn sáng
+          digitalWrite(RELAY_PIN, HIGH);  // Lock door
+          isDoorOpen = false;
+          lcd.clear();
+          lcd.print("Door Locked");
+          delay(2000);
+        }
+        else if (resetCount == 2) {
+          // Lần nhấn thứ hai: mở cửa trong 10 giây, sau đó đóng cửa và tắt LED
+          digitalWrite(RELAY_PIN, LOW);   // Unlock door
+          isDoorOpen = true;
+          lcd.clear();
+          lcd.print("Door Unlocked");
+          delay(10000);                   // Giữ mở cửa 10 giây
+          digitalWrite(RELAY_PIN, HIGH);  // Lock door
+          isDoorOpen = false;
+          digitalWrite(LED_PIN, LOW);      // Tắt LED
+          lcd.clear();
+          lcd.print("Door Locked");
+          delay(2000);
+        }
+      }
     }
+    // Sau khi hoàn thành, hiển thị thông báo reset và chờ một lúc rồi bắt đầu lại quá trình đăng nhập
+    lcd.clear();
+    lcd.print("Restarting...");
+    delay(1000);
+  }
 }
