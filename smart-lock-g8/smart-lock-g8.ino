@@ -36,8 +36,8 @@ uint8_t authorizedFingerID = 1;
 
 // Toggle button configuration
 #define RESET_BUTTON_PIN 12
-//volatile bool buttonPressed = false;
-//bool Door_Locked = true; 
+volatile bool buttonPressed = false;
+bool Door_Locked = true; 
 
 // Keypad 4x4 configuration
 const byte ROWS = 4;
@@ -82,14 +82,14 @@ bool sendOTPViaTelegram(String otp) {
   }
 }
 
-//void IRAM_ATTR handleButtonPress() {
-//    static unsigned long lastPressTime = 0;
-//    unsigned long currentTime = millis();
-//    if (currentTime - lastPressTime > 50) {  // Debounce delay (50ms)
-//        buttonPressed = true;
-//        lastPressTime = currentTime;
-//    }
-//}
+void IRAM_ATTR handleButtonPress() {
+    static unsigned long lastPressTime = 0;
+    unsigned long currentTime = millis();
+    if (currentTime - lastPressTime > 50) {  // Debounce delay (50ms)
+        buttonPressed = true;
+        lastPressTime = currentTime;
+    }
+}
 
 
 String getKeypadInput() {
@@ -467,7 +467,7 @@ void setup() {
 
   // LED status is high
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
-//  attachInterrupt(digitalPinToInterrupt(RESET_BUTTON_PIN), handleButtonPress, FALLING);
+  attachInterrupt(digitalPinToInterrupt(RESET_BUTTON_PIN), handleButtonPress, FALLING);
 
   pinMode(RELAY_PIN, OUTPUT);
   // Locking at first
@@ -512,28 +512,27 @@ bool isEmptyHouse = true;
 bool isDoorOpen = false;
 bool haveGuess = false;
 void loop() {
-//  if (buttonPressed) {
-//        buttonPressed = false;  // Reset flag
-//        if (Door_Locked) {
-//            Serial.println("Door is locked. Stopping authentication and opening the door.");
-//            Door_Locked = false;  // Unlock the door
-//            lcd.clear();
-//            lcd.print("Access Granted");
-//            digitalWrite(RELAY_PIN, LOW); // Mở khóa 
-//            lcd.setCursor(0, 0);
-//            lcd.print("Door Unlocked");
-//            
-//        } else {
-//            Serial.println("Door is unlocked. Locking the door and restarting authentication.");
-//            Door_Locked = true;  // Lock the door
-//            Door_Locked = true;
-//            isDoorOpen = false;
-//            digitalWrite(RELAY_PIN, HIGH); // Khóa cửa
-//            lcd.clear();
-//            lcd.print("Lock the door!");
-//            delay(2000);  
-//        }
-//    } else {
+  if (buttonPressed) {
+        buttonPressed = false;  // Reset flag
+        if (Door_Locked) {
+            Serial.println("Door is locked. Stopping authentication and opening the door.");
+            Door_Locked = false;  // Unlock the door
+            lcd.clear();
+            lcd.print("Access Granted");
+            digitalWrite(RELAY_PIN, LOW); // Mở khóa 
+            lcd.setCursor(0, 0);
+            lcd.print("Door Unlocked");
+            
+        } else {
+            Serial.println("Door is unlocked. Locking the door and restarting authentication.");
+            Door_Locked = true;  // Lock the door
+            //isDoorOpen = false;
+            digitalWrite(RELAY_PIN, HIGH); // Khóa cửa
+            lcd.clear();
+            lcd.print("Lock the door!");
+            delay(2000);  
+        }
+    } else {
         if (securityCheck()) {
         lcd.clear();
         lcd.print("Access Granted");
@@ -541,32 +540,8 @@ void loop() {
         lcd.setCursor(0, 0);
         lcd.print("Door Unlocked");
         digitalWrite(LED_PIN, HIGH);
-//        Door_Locked = false;
-        isEmptyHouse = false; isDoorOpen = true;
-        if(isEmptyHouse == false) {
-            while (digitalRead(RESET_BUTTON_PIN) == HIGH) {
-              delay(100);
-            }
-            if(isDoorOpen == true) { // Cửa mở -->> Khóa cửa
-                isDoorOpen = false;
-                digitalWrite(RELAY_PIN, HIGH); // Khóa cửa
-                lcd.clear();
-                lcd.print("Lock the door!");
-                delay(2000);  
-            }  
-            while (digitalRead(RESET_BUTTON_PIN) == HIGH) {
-              delay(100);
-            }
-            if(isDoorOpen == false) { // Cửa khóa -->> Mở cửa
-                isEmptyHouse = true;
-                digitalWrite(RELAY_PIN, LOW); 
-                digitalWrite(LED_PIN, LOW);
-                delay(5000);
-                digitalWrite(RELAY_PIN, HIGH);
-                lcd.clear();
-                lcd.print("Door Locked");
-                delay(2000);  
-            }
-        }
+        Door_Locked = false;
+        delay(10000);
       }
+  }
 }
