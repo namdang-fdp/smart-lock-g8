@@ -2,8 +2,8 @@
 #include <WiFiClientSecure.h>
 
 // Thông tin WiFi của bạn
-const char* ssid     = "Nhat Nam_2.4G";
-const char* password = "nhatnam0811";
+const char* ssid     = "OPPO Reno8";
+const char* password = "d29ph9xh";
 const char* host = "05fc9a3d-8f86-4d0c-9a7e-6201d2f4072d-00-mk71iqq52uxk.sisko.replit.dev";
 const int httpsPort = 443;
 

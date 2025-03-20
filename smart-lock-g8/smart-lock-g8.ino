@@ -14,6 +14,8 @@ const char* ssid = "OPPO Reno8";
 const char* wifiPassword = "d29ph9xh";
 const char* BOT_TOKEN = "7290998230:AAGi2WAFE0QgAWh-FmmyhAU5sRyGVbkFMbc";
 const char* CHAT_ID = "-4793674715";
+const char* host = "05fc9a3d-8f86-4d0c-9a7e-6201d2f4072d-00-mk71iqq52uxk.sisko.replit.dev";
+const int httpsPort = 443;
 
 WiFiClientSecure secured_client;
 UniversalTelegramBot telegramBot(BOT_TOKEN, secured_client);
@@ -140,6 +142,8 @@ bool checkRFID() {
   for (byte i = 0; i < mfrc522.uid.size; i++) {
     if (mfrc522.uid.uidByte[i] != authorizedRFID[i]) return false;
   }
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
   return true;
 }
 
@@ -193,21 +197,19 @@ bool checkPassword() {
   return false;
 }
 bool securityCheck() {
-  delay(5000);
-  lcd.clear();
   lcd.print("Security Check: ");
-  delay(3000);
+  delay(1000);
   lcd.clear();
+  delay(1000);
   lcd.print("Input RIFD card: ");
-  delay(4000);
+  mfrc522.PCD_Init();  
+  delay(2000);          
   if (!checkRFID()) {
-    //Serial.println("RFID không được cấp quyền.");
     lcd.clear();
     lcd.print("RFID Invalid");
     delay(2000);
     return false;
   }
-  //Serial.println("RFID đúng.");
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("RFID OK!");
@@ -226,6 +228,8 @@ bool securityCheck() {
     uint8_t fpID = getFingerprintID();
     if (fpID == authorizedFingerID) {
       //Serial.println("Xác thực vân tay thành công!");
+      lcd.setCursor(0, 0);
+      lcd.print("Fingerprint OK!");
       fpVerified = true;
       break;
     } else {
@@ -433,6 +437,48 @@ void clearAllFingerprints() {
   delay(2000);
 }
 
+// Giả sử bạn đã khai báo các thông tin WiFi, host, port, client,... ở đầu code.
+// D34 dùng để đọc giá trị quang trở (lightValue).
+
+void sendLightDataToWeb() {
+  static unsigned long lastSend = 0;
+  unsigned long now = millis();
+
+  // Mỗi 5 giây mới gửi 1 lần (có thể điều chỉnh)
+  if (now - lastSend >= 1000) {
+    lastSend = now;
+
+    // Đọc giá trị quang trở
+    int lightValue = analogRead(34); 
+    // Kết nối server Replit qua HTTPS (ví dụ)
+    if (!secured_client.connect(host, httpsPort)) {
+      // Kết nối thất bại, thoát hàm
+      return;
+    }
+    // Tạo đường dẫn GET
+    String url = "/iot/data?light=" + String(lightValue);
+
+    // Gửi yêu cầu
+    secured_client.println("GET " + url + " HTTP/1.1");
+    secured_client.println("Host: " + String(host));
+    secured_client.println("Connection: close");
+    secured_client.println(); // Kết thúc header
+
+    // Đọc phản hồi server (optional)
+    // Chỉ để flush
+    while (secured_client.connected()) {
+      String line = secured_client.readStringUntil('\n');
+      if (line == "\r") {
+        break;
+      }
+    }
+    String response = secured_client.readString();
+    // (Có thể in ra Serial nếu cần debug)
+    secured_client.stop();
+  }
+}
+
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -445,7 +491,7 @@ void setup() {
   }
   //Serial.println("\nWiFi đã kết nối. IP: " + WiFi.localIP().toString());
   secured_client.setInsecure();
-
+  sendLightDataToWeb();
   lcd.begin();
   lcd.backlight();
   lcd.clear();
@@ -478,6 +524,7 @@ void setup() {
   //Serial.println("Keypad đã khởi tạo");
 
   if (systemPassword == "") {
+    sendLightDataToWeb();
     //Serial.println("Chưa có mật khẩu. Đăng ký mật khẩu...");
     lcd.clear();
     lcd.print("Set Password");
@@ -492,12 +539,14 @@ void setup() {
   // Khởi tạo LED
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW); 
+  sendLightDataToWeb();
 }
 
 bool isEmptyHouse = true;
 bool isDoorOpen = false;
 
 void loop() {
+  //sendLightDataToWeb();
   if (securityCheck()) {
     // Sau khi xác thực thành công:
     // Mở khóa cửa (relay LOW) và bật LED (on)
@@ -513,6 +562,8 @@ void loop() {
     int resetCount = 0;
     // Đợi đến khi nhận đủ 2 lần nhấn nút reset
     while (resetCount < 2) {
+      delay(500);
+      sendLightDataToWeb();
       if (digitalRead(RESET_BUTTON_PIN) == LOW) {
         resetCount++;
         // Chờ nút được nhả (debounce)
@@ -522,6 +573,8 @@ void loop() {
         delay(500); // debounce thêm
         if (resetCount == 1) {
           // Lần nhấn thứ nhất: đóng cửa nhưng LED vẫn sáng
+          delay(500);
+          sendLightDataToWeb();
           digitalWrite(RELAY_PIN, HIGH);  // Lock door
           isDoorOpen = false;
           lcd.clear();
@@ -537,7 +590,9 @@ void loop() {
           delay(10000);                   // Giữ mở cửa 10 giây
           digitalWrite(RELAY_PIN, HIGH);  // Lock door
           isDoorOpen = false;
-          digitalWrite(LED_PIN, LOW);      // Tắt LED
+          digitalWrite(LED_PIN, LOW);
+          delay(500);
+          sendLightDataToWeb();// Tắt LED
           lcd.clear();
           lcd.print("Door Locked");
           delay(2000);
