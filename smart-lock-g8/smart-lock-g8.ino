@@ -10,8 +10,8 @@
 #include <UniversalTelegramBot.h>
 
 // Wifi password && telegram token
-const char* ssid = "OPPO Reno8";
-const char* wifiPassword = "d29ph9xh";
+const char* ssid = "iPhone";
+const char* wifiPassword = "190303Goldcoin  ";
 const char* BOT_TOKEN = "7290998230:AAGi2WAFE0QgAWh-FmmyhAU5sRyGVbkFMbc";
 const char* CHAT_ID = "-4793674715";
 const char* host = "05fc9a3d-8f86-4d0c-9a7e-6201d2f4072d-00-mk71iqq52uxk.sisko.replit.dev";
@@ -437,9 +437,6 @@ void clearAllFingerprints() {
   delay(2000);
 }
 
-// Giả sử bạn đã khai báo các thông tin WiFi, host, port, client,... ở đầu code.
-// D34 dùng để đọc giá trị quang trở (lightValue).
-
 void sendLightDataToWeb() {
   static unsigned long lastSend = 0;
   unsigned long now = millis();
@@ -465,7 +462,6 @@ void sendLightDataToWeb() {
     secured_client.println(); // Kết thúc header
 
     // Đọc phản hồi server (optional)
-    // Chỉ để flush
     while (secured_client.connected()) {
       String line = secured_client.readStringUntil('\n');
       if (line == "\r") {
@@ -473,7 +469,6 @@ void sendLightDataToWeb() {
       }
     }
     String response = secured_client.readString();
-    // (Có thể in ra Serial nếu cần debug)
     secured_client.stop();
   }
 }
