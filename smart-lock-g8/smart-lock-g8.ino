@@ -8,38 +8,48 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
+#include <Preferences.h>
 
-// Wifi password && telegram token
-const char* ssid = "iPhone";
-const char* wifiPassword = "190303Goldcoin  ";
+Preferences preferences;
+
+const char* ssid = "OPPO Reno8";
+const char* wifiPassword = "d29ph9xh";
 const char* BOT_TOKEN = "7290998230:AAGi2WAFE0QgAWh-FmmyhAU5sRyGVbkFMbc";
 const char* CHAT_ID = "-4793674715";
-const char* host = "05fc9a3d-8f86-4d0c-9a7e-6201d2f4072d-00-mk71iqq52uxk.sisko.replit.dev";
+const char* host = "e06671e9-6ab1-4100-85bb-683f3be2387b-00-wneid9i0hk23.sisko.replit.dev";
 const int httpsPort = 443;
 
 WiFiClientSecure secured_client;
 UniversalTelegramBot telegramBot(BOT_TOKEN, secured_client);
 
-// LCD I2c configuration
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// RIFD configuration
 #define RST_PIN 2
 #define SS_PIN  5
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 byte authorizedRFID[] = { 0x4A, 0xDA, 0x36, 0x02 };
 
-// Fingerprint configuration
 #define FINGER_RX 16
 #define FINGER_TX 17
 HardwareSerial fingerSerial(2);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&fingerSerial);
-uint8_t authorizedFingerID = 1;
+uint8_t nextFingerID = 1;
 
-// Toggle button configuration
 #define RESET_BUTTON_PIN 12
 
-// Keypad 4x4 configuration
+volatile bool buttonPressed = false;
+volatile bool authCancelled = false;
+volatile unsigned long lastInterruptTime = 0;
+
+void IRAM_ATTR handleButtonPress() {
+  unsigned long currentMillis = millis();
+  if (currentMillis- lastInterruptTime >= 100) {
+    buttonPressed = true;
+    authCancelled = true;
+    lastInterruptTime = currentMillis;
+  }
+}
+
 const byte ROWS = 4;
 const byte COLS = 4;
 char keys[ROWS][COLS] = {
@@ -51,93 +61,27 @@ char keys[ROWS][COLS] = {
 byte rowPins[ROWS] = {13, 14, 27, 26};
 byte colPins[COLS] = {15, 25, 32, 33};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
-
-//Led configuration
-#define LED_PIN 3  
-
-//LDR configuration
+ 
 #define LDR_PIN 34  
-
-// System password
-String systemPassword = "";
-
-// OTP
-String currentOTP = "";
-
-// Relay configuration
 #define RELAY_PIN 1 
 
-String generateOTP() {
-  int otp = random(100000, 1000000);
-  return String(otp);
-}
-bool sendOTPViaTelegram(String otp) {
-  String message = "Your OTP is: " + otp;
-  if (telegramBot.sendMessage(CHAT_ID, message, "")) {
-    //Serial.println("OTP sent via Telegram!");
-    return true;
-  } else {
-    //Serial.println("Error sending OTP via Telegram!");
-    return false;
-  }
-}
+String systemPassword = "";
+String currentOTP = "";
 
-String getKeypadInput() {
-  String input = "";
-  lcd.clear();
-  lcd.print("Enter OTP:");
-  lcd.setCursor(0, 1);
-  while (input.length() < 6) {
-    char key = keypad.getKey();
-    if (key != NO_KEY) {
-      input += key;
-      lcd.print("*");
-      delay(300);
+void waitForDelay(unsigned long ms) {
+  unsigned long start = millis();
+  while(millis() - start < ms) {
+    if (buttonPressed) {  // check the flag
+      break;
     }
+    delay(10);
   }
-  return input;
-}
-
-bool checkOTP() {
-  currentOTP = generateOTP();
-  //Serial.print("Generated OTP: ");
-  //Serial.println(currentOTP);
-  if (!sendOTPViaTelegram(currentOTP)) {
-    lcd.clear();
-    lcd.print("OTP send Err");
-    delay(2000);
-    return false;
-  }
-  const int maxOtpAttempts = 5;
-  int otpAttempts = 0;
-  while (otpAttempts < maxOtpAttempts) {
-    lcd.clear();
-    lcd.print("Enter OTP:");
-    String enteredOTP = getKeypadInput();
-    //Serial.print("Entered OTP: ");
-    //Serial.println(enteredOTP);
-    if (enteredOTP == currentOTP) {
-      lcd.clear();
-      lcd.print("OTP Correct");
-      delay(2000);
-      return true;
-    } else {
-      otpAttempts++;
-      lcd.clear();
-      lcd.print("OTP Incorrect");
-      lcd.setCursor(0, 1);
-      lcd.print("Try again ");
-      lcd.print(otpAttempts);
-      delay(2000);
-    }
-  }
-  return false;
 }
 
 bool checkRFID() {
+  if (authCancelled) return true;
   if (!mfrc522.PICC_IsNewCardPresent()) return false;
   if (!mfrc522.PICC_ReadCardSerial()) return false;
-  
   if (mfrc522.uid.size != sizeof(authorizedRFID)) return false;
   for (byte i = 0; i < mfrc522.uid.size; i++) {
     if (mfrc522.uid.uidByte[i] != authorizedRFID[i]) return false;
@@ -147,173 +91,187 @@ bool checkRFID() {
   return true;
 }
 
-uint8_t getFingerprintID() {
+bool checkFingerprint() {
+  if (authCancelled) return true;
   uint8_t p = finger.getImage();
-  if (p != FINGERPRINT_OK) return p;
+  if (p != FINGERPRINT_OK) return false;
   p = finger.image2Tz();
-  if (p != FINGERPRINT_OK) return p;
+  if (p != FINGERPRINT_OK) return false;
   p = finger.fingerFastSearch();
-  if (p != FINGERPRINT_OK) return p;
-  return finger.fingerID;
+  if (p != FINGERPRINT_OK) return false;
+  return (finger.fingerID > 0);
 }
 
 bool checkPassword() {
-  const int maxPwdAttempts = 5;
-  int pwdAttempts = 0;
-  while (pwdAttempts < maxPwdAttempts) {
-    lcd.clear();
-    lcd.print("Enter Password:");
-    //Serial.println("Nhập mật khẩu:");
-    String entered = "";
-    while (entered.length() < 4) {
-      char key = keypad.getKey();
-      if (key != NO_KEY) {
-        entered += key;
-        Serial.print(key);
-        lcd.setCursor(entered.length()-1, 1);
-        lcd.print("*");
-        delay(300);
-      }
-    }
-    //Serial.println();
-    if (entered == systemPassword) {
-      //Serial.println("Mật khẩu đúng!");
-      lcd.clear();
-      lcd.print("Password Correct!");
-      delay(5000);
-      return true;
-    } else {
-      pwdAttempts++;
-      //Serial.print("Wrong pass! Try again" );
-      //Serial.println(pwdAttempts);
-      lcd.clear();
-      lcd.print("Pass Incorrect");
-      lcd.setCursor(0, 1);
-      lcd.print("Attempts: ");
-      lcd.print(pwdAttempts);
-      delay(2000);
+  lcd.setCursor(0, 1);
+  String entered = "";
+  while (entered.length() < 4) {
+    if (authCancelled) return true;
+    char key = keypad.getKey();
+    if (key != NO_KEY) {
+      lcd.print('*');
+      entered += key;
+      waitForDelay(300);
     }
   }
+  return (entered == systemPassword);
+}
+
+String generateOTP() {
+  int otp = random(100000, 1000000);
+  return String(otp);
+}
+
+bool sendOTPViaTelegram(String otp) {
+  String message = "Your OTP is: " + otp;
+  return telegramBot.sendMessage(CHAT_ID, message, "");
+}
+
+bool checkOTP() {
+  lcd.setCursor(0, 1);
+  currentOTP = generateOTP();
+  if (!sendOTPViaTelegram(currentOTP)) {
+    return false;
+  }
+  String enteredOTP = "";
+  while (enteredOTP.length() < 6) {
+    if (authCancelled) return true;
+    char key = keypad.getKey();
+    if (key != NO_KEY) {
+      lcd.print('*');
+      enteredOTP += key;
+      waitForDelay(300);
+    }
+  }
+  return (enteredOTP == currentOTP);
+}
+
+bool tryAuthStep(const char* prompt, bool (*authFunc)(), const char* successMsg) {
+  const int maxAttempts = 5;
+  for (int attempt = 0; attempt < maxAttempts; attempt++) {
+    if (buttonPressed) {
+      buttonPressed = false;
+      return true;
+    }
+    lcd.clear();
+    lcd.print(prompt);
+    waitForDelay(3000);
+    if (authFunc()) {
+      lcd.clear();
+      lcd.print(successMsg);
+      waitForDelay(3000);
+      return true;
+    }
+    lcd.clear();
+    lcd.print("Try again");
+    lcd.setCursor(0, 1);
+    lcd.print("Attempts: ");
+    lcd.print(attempt + 1);
+    waitForDelay(3000);
+  }
+  lcd.clear();
+  lcd.print("Over 5 tries:");
+  lcd.setCursor(0, 1);
+  lcd.print("Restart process");
+  waitForDelay(3000);
   return false;
 }
+
 bool securityCheck() {
-  lcd.print("Security Check: ");
-  delay(1000);
   lcd.clear();
-  delay(1000);
-  lcd.print("Input RIFD card: ");
-  mfrc522.PCD_Init();  
-  delay(2000);          
-  if (!checkRFID()) {
-    lcd.clear();
-    lcd.print("RFID Invalid");
-    delay(2000);
+  lcd.print("Security Check:");
+  waitForDelay(1000);
+  
+  authCancelled = false;
+  
+  if (!tryAuthStep("Input RFID", checkRFID, "RFID OK!"))
     return false;
-  }
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("RFID OK!");
-  delay(3000);
-
-  //Serial.println("Vui lòng quét vân tay...");
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Scan Finger");
-  delay(3000);
-
-  const int maxFpAttempts = 5;
-  int fpAttempts = 0;
-  bool fpVerified = false;
-  while (fpAttempts < maxFpAttempts) {
-    uint8_t fpID = getFingerprintID();
-    if (fpID == authorizedFingerID) {
-      //Serial.println("Xác thực vân tay thành công!");
-      lcd.setCursor(0, 0);
-      lcd.print("Fingerprint OK!");
-      fpVerified = true;
-      break;
-    } else {
-      fpAttempts++;
-      //Serial.print("Vân tay không khớp. Lần thử: ");
-      //Serial.println(fpAttempts);
-      lcd.clear();
-      lcd.print("Try Finger Again");
-      lcd.setCursor(0,1);
-      lcd.print("Attempts: ");
-      lcd.print(fpAttempts);
-      delay(3000);
-    }
-  }
-  if (!fpVerified) {
-    //Serial.println("Quá 5 lần thử vân tay, vui lòng quét lại thẻ RFID.");
-    lcd.clear();
-    lcd.print("Over 5 tries: ");
-    lcd.setCursor(0,1);
-    lcd.print("Restart process");
-    delay(3000);
+  if (authCancelled) return true;
+ 
+  if (!tryAuthStep("Scan Finger", checkFingerprint, "Fingerprint OK!"))
     return false;
-  }
-
-  if (!checkPassword()) {
-    //Serial.println("Mật khẩu không khớp sau 5 lần thử.");
-    lcd.clear();
-    lcd.print("Over 5 tries: ");
-    lcd.setCursor(0,1);
-    lcd.print("Restart process");
-    delay(3000);
+  if (authCancelled) return true;
+  
+  if (!tryAuthStep("Enter Password", checkPassword, "Password OK!"))
     return false;
-  }
-
-  if (!checkOTP()) {
-    //Serial.println("OTP không khớp sau 5 lần thử.");
-    lcd.clear();
-    lcd.print("Over 5 tries: ");
-    lcd.setCursor(0,1);
-    lcd.print("Restart process");
-    delay(3000);
+  if (authCancelled) return true;
+  
+  if (!tryAuthStep("Enter OTP", checkOTP, "OTP OK!"))
     return false;
-  }
-
+  if (authCancelled) return true;
+      
   return true;
+}
+
+void sendLightDataToWeb() {
+  static unsigned long lastSend = 0;
+  unsigned long now = millis();
+  if (now - lastSend >= 1000) {
+    lastSend = now;
+    int lightValue = analogRead(LDR_PIN); 
+    if (!secured_client.connect(host, httpsPort)) {
+      return;
+    }
+    String url = "/iot/data?light=" + String(lightValue);
+    secured_client.println("GET " + url + " HTTP/1.1");
+    secured_client.println("Host: " + String(host));
+    secured_client.println("Connection: close");
+    secured_client.println();
+    while (secured_client.connected()) {
+      String line = secured_client.readStringUntil('\n');
+      if (line == "\r") break;
+    }
+    secured_client.readString();
+    secured_client.stop();
+  }
+}
+
+void savePassword(const String &pwd) {
+  preferences.begin("auth", false);
+  preferences.putString("pwd", pwd);
+  preferences.end();
+}
+
+String loadPassword() {
+  preferences.begin("auth", true);
+  String pwd = preferences.getString("pwd", "");
+  preferences.end();
+  return pwd;
 }
 
 void registerPassword() {
   lcd.clear();
   lcd.print("Set Password:");
-  //Serial.println("Nhập mật khẩu (4 số):");
+  lcd.setCursor(0, 1);
   String pwd = "";
   while (pwd.length() < 4) {
     char key = keypad.getKey();
     if (key != NO_KEY) {
+      lcd.print('*');
       pwd += key;
-      Serial.print(key);
-      lcd.setCursor(pwd.length()-1, 1);
-      lcd.print("*");
       delay(300);
     }
   }
+  
   lcd.clear();
   lcd.print("Confirm:");
-  Serial.println("\nXác nhận mật khẩu:");
+  lcd.setCursor(0, 1);
   String pwdConfirm = "";
-  while (pwdConfirm.length() < 4) {
+  while (pwdConfirm.length() < 4) {      
     char key = keypad.getKey();
     if (key != NO_KEY) {
+      lcd.print('*');
       pwdConfirm += key;
-      Serial.print(key);
-      lcd.setCursor(pwdConfirm.length()-1, 1);
-      lcd.print("*");
       delay(300);
     }
   }
   if (pwd == pwdConfirm) {
     systemPassword = pwd;
-    Serial.println("\nMật khẩu đăng ký thành công!");
+    savePassword(systemPassword);
     lcd.clear();
     lcd.print("Password Set!");
     delay(2000);
   } else {
-    Serial.println("\nMật khẩu không khớp. Vui lòng thử lại.");
     lcd.clear();
     lcd.print("Mismatch! Retry");
     delay(2000);
@@ -321,61 +279,60 @@ void registerPassword() {
   }
 }
 
+void resetPasswordPrompt() {
+  lcd.clear();
+  lcd.print("Reset Password?");
+  lcd.setCursor(0, 1);
+  lcd.print("A: Yes");
+  char key = 0;
+  while (key == 0) { 
+    key = keypad.getKey();
+  }
+  if (key == 'A') {
+    registerPassword();
+  }
+  lcd.clear();
+  lcd.print("Close after");
+  lcd.setCursor(0, 1);
+  lcd.print("10 seconds");
+}
+
 uint8_t enrollFinger(uint8_t id) {
   int p = 0;
-  Serial.println("Vui lòng đặt ngón tay (lần 1)...");
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Enroll FP 1/2");
   while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    if (p == FINGERPRINT_NOFINGER) {
-      // chờ
-    } else {
-      Serial.print("Lỗi quét lần 1: ");
-      Serial.println(p);
-    }
     delay(200);
   }
   p = finger.image2Tz(1);
   if (p != FINGERPRINT_OK) {
-    Serial.println("Chuyển đổi ảnh lần 1 thất bại");
     lcd.clear();
     lcd.print("Err FP 1");
     return p;
   }
-  Serial.println("Nhấc ngón tay ra, đợi 2 giây...");
   lcd.clear();
   lcd.print("Remove finger");
   delay(2000);
-  Serial.println("Vui lòng đặt ngón tay (lần 2)...");
   lcd.clear();
   lcd.print("Enroll FP 2/2");
   while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    if (p == FINGERPRINT_NOFINGER) {
-      // chờ
-    } else {
-      Serial.print("Lỗi quét lần 2: ");
-      Serial.println(p);
-    }
     delay(200);
   }
   p = finger.image2Tz(2);
   if (p != FINGERPRINT_OK) {
-    Serial.println("Chuyển đổi ảnh lần 2 thất bại");
     lcd.clear();
     lcd.print("Err FP 2");
     return p;
   }
   p = finger.createModel();
   if (p != FINGERPRINT_OK) {
-    Serial.println("Hai lần quét không khớp");
     lcd.clear();
     lcd.print("Enroll Mismatch");
     return p;
   }
   p = finger.storeModel(id);
   if (p != FINGERPRINT_OK) {
-    Serial.println("Lưu model thất bại");
     lcd.clear();
     lcd.print("Store Error");
     return p;
@@ -384,109 +341,98 @@ uint8_t enrollFinger(uint8_t id) {
 }
 
 void initFingerprintSystem() {
-  clearAllFingerprints();
   finger.getTemplateCount();
-  Serial.print("Số mẫu hiện có: ");
-  Serial.println(finger.templateCount);
-  
   if (finger.templateCount == 0) {
-    Serial.println("Chưa có mẫu, bắt đầu đăng ký vân tay...");
     lcd.clear();
-    lcd.setCursor(0, 0);
     lcd.print("No FP stored");
     delay(2000);
-    while (enrollFinger(authorizedFingerID) != FINGERPRINT_OK) {
-      Serial.println("Đăng ký thất bại, thử lại...");
+    while (enrollFinger(nextFingerID) != FINGERPRINT_OK) {
       lcd.clear();
-      lcd.print("Enroll Failed");
       delay(2000);
     }
-    Serial.println("Đăng ký vân tay thành công!");
     lcd.clear();
     lcd.print("Enroll Success");
     delay(2000);
+    nextFingerID++; 
   } else {
-    Serial.println("Đã có mẫu, hệ thống sẵn sàng.");
+    nextFingerID = finger.templateCount + 1;
     lcd.clear();
     lcd.print("System Ready");
     delay(2000);
   }
 }
+
 void clearAllFingerprints() {
-  Serial.println("Đang xóa tất cả mẫu vân tay...");
   lcd.clear();
-  lcd.setCursor(0, 0);
   lcd.print("Clearing FP...");
   for (uint8_t id = 1; id <= 127; id++) {
     uint8_t p = finger.deleteModel(id);
-    if (p == FINGERPRINT_OK) {
-      Serial.print("Đã xóa mẫu ID: ");
-      Serial.println(id);
-    } else {
-      Serial.print("ID ");
-      Serial.print(id);
-      Serial.print(" xóa không được, code: 0x");
-      Serial.println(p, HEX);
-    }
+    if (p != FINGERPRINT_OK) id--;
     delay(50);
   }
-  Serial.println("Xóa hết mẫu vân tay hoàn tất!");
   lcd.clear();
-  lcd.setCursor(0, 0);
   lcd.print("Clear Complete");
   delay(2000);
 }
 
-void sendLightDataToWeb() {
-  static unsigned long lastSend = 0;
-  unsigned long now = millis();
-
-  // Mỗi 5 giây mới gửi 1 lần (có thể điều chỉnh)
-  if (now - lastSend >= 1000) {
-    lastSend = now;
-
-    // Đọc giá trị quang trở
-    int lightValue = analogRead(34); 
-    // Kết nối server Replit qua HTTPS (ví dụ)
-    if (!secured_client.connect(host, httpsPort)) {
-      // Kết nối thất bại, thoát hàm
-      return;
+void promptResetAndAddFingerprint() {
+  char key = 0;
+  lcd.clear();
+  lcd.print("Reset FP?");
+  lcd.setCursor(0, 1);
+  lcd.print("A: Confirm");
+  while (key == 0) { 
+    key = keypad.getKey();
+  }
+  if (key == 'A') {
+    clearAllFingerprints();
+    lcd.clear();
+    lcd.print("Setup New FP");
+    delay(2000);
+    while (enrollFinger(nextFingerID) != FINGERPRINT_OK) {
+      lcd.clear();
+      delay(2000);
     }
-    // Tạo đường dẫn GET
-    String url = "/iot/data?light=" + String(lightValue);
-
-    // Gửi yêu cầu
-    secured_client.println("GET " + url + " HTTP/1.1");
-    secured_client.println("Host: " + String(host));
-    secured_client.println("Connection: close");
-    secured_client.println(); // Kết thúc header
-
-    // Đọc phản hồi server (optional)
-    while (secured_client.connected()) {
-      String line = secured_client.readStringUntil('\n');
-      if (line == "\r") {
-        break;
-      }
+    lcd.clear();
+    lcd.print("Enroll Success");
+    nextFingerID = 1;
+  }
+  
+  key = 0;
+  lcd.clear();
+  lcd.print("Enroll FP?");
+  lcd.setCursor(0, 1);
+  lcd.print("A: Confirm");
+  while (key == 0) { 
+    key = keypad.getKey();
+  }
+  while (key == 'A') {
+    while (enrollFinger(nextFingerID) != FINGERPRINT_OK) {
+      lcd.clear();
+      delay(2000);
     }
-    String response = secured_client.readString();
-    secured_client.stop();
+    lcd.clear();
+    lcd.print("Enroll Success");
+    delay(2000);
+    nextFingerID++; 
+    key = 0;
+    lcd.clear();
+    lcd.print("Add another? A:Y B:N");
+    while (key == 0) {
+      key = keypad.getKey();
+    }
+    if (key != 'A') break;
   }
 }
 
-
 void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  //Serial.println("Khởi tạo hệ thống bảo mật (RFID, FP, Keypad, OTP)...");
-
   WiFi.begin(ssid, wifiPassword);
   while(WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
   }
-  //Serial.println("\nWiFi đã kết nối. IP: " + WiFi.localIP().toString());
   secured_client.setInsecure();
   sendLightDataToWeb();
+  
   lcd.begin();
   lcd.backlight();
   lcd.clear();
@@ -494,33 +440,26 @@ void setup() {
   lcd.print("System Start...");
   delay(2000);
 
-  // LED status is high
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(RESET_BUTTON_PIN), handleButtonPress, FALLING);
+  
   pinMode(RELAY_PIN, OUTPUT);
-  // Locking at first
-  digitalWrite(RELAY_PIN, HIGH); 
+  digitalWrite(RELAY_PIN, HIGH);
 
   SPI.begin();
   mfrc522.PCD_Init();
-  Serial.println("RFID đã khởi tạo");
 
   fingerSerial.begin(57600, SERIAL_8N1, FINGER_RX, FINGER_TX);
   delay(100);
   finger.begin(57600);
-  if (finger.verifyPassword()) {
-    //Serial.println("Fingerprint sensor đã khởi tạo");
-  } else {
-    //Serial.println("Không tìm thấy fingerprint sensor!");
+  if (!finger.verifyPassword()) {
     lcd.clear();
     lcd.print("FP sensor ERR");
     while (true) { delay(1); }
   }
 
-  //Serial.println("Keypad đã khởi tạo");
-
+  systemPassword = loadPassword();
   if (systemPassword == "") {
-    sendLightDataToWeb();
-    //Serial.println("Chưa có mật khẩu. Đăng ký mật khẩu...");
     lcd.clear();
     lcd.print("Set Password");
     registerPassword();
@@ -528,75 +467,58 @@ void setup() {
 
   initFingerprintSystem();
 
-  //Serial.println("Hệ thống bảo mật sẵn sàng. Quẹt thẻ RFID để xác thực...");
   lcd.clear();
-  lcd.print("Scan RFID");
-  // Khởi tạo LED
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW); 
   sendLightDataToWeb();
 }
 
-bool isEmptyHouse = true;
 bool isDoorOpen = false;
+unsigned long doorOpenTime = 0;
 
 void loop() {
-  //sendLightDataToWeb();
-  if (securityCheck()) {
-    // Sau khi xác thực thành công:
-    // Mở khóa cửa (relay LOW) và bật LED (on)
-    digitalWrite(RELAY_PIN, LOW);    // Unlock door
-    digitalWrite(LED_PIN, HIGH);       // Turn on LED
-    lcd.clear();
-    lcd.print("Access Granted");
-    lcd.setCursor(0, 1);
-    lcd.print("Door Unlocked");
-    isEmptyHouse = false;
-    isDoorOpen = true;
-    
-    int resetCount = 0;
-    // Đợi đến khi nhận đủ 2 lần nhấn nút reset
-    while (resetCount < 2) {
-      delay(500);
-      sendLightDataToWeb();
-      if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-        resetCount++;
-        // Chờ nút được nhả (debounce)
-        while (digitalRead(RESET_BUTTON_PIN) == LOW) {
-          delay(100);
-        }
-        delay(500); // debounce thêm
-        if (resetCount == 1) {
-          // Lần nhấn thứ nhất: đóng cửa nhưng LED vẫn sáng
-          delay(500);
-          sendLightDataToWeb();
-          digitalWrite(RELAY_PIN, HIGH);  // Lock door
-          isDoorOpen = false;
-          lcd.clear();
-          lcd.print("Door Locked");
-          delay(2000);
-        }
-        else if (resetCount == 2) {
-          // Lần nhấn thứ hai: mở cửa trong 10 giây, sau đó đóng cửa và tắt LED
-          digitalWrite(RELAY_PIN, LOW);   // Unlock door
-          isDoorOpen = true;
-          lcd.clear();
-          lcd.print("Door Unlocked");
-          delay(10000);                   // Giữ mở cửa 10 giây
-          digitalWrite(RELAY_PIN, HIGH);  // Lock door
-          isDoorOpen = false;
-          digitalWrite(LED_PIN, LOW);
-          delay(500);
-          sendLightDataToWeb();// Tắt LED
-          lcd.clear();
-          lcd.print("Door Locked");
-          delay(2000);
-        }
-      }
+  // Check and clear the button flag
+  bool localButtonPressed = buttonPressed;
+  buttonPressed = false;
+  
+  if (localButtonPressed) {
+    if (isDoorOpen) {
+      digitalWrite(RELAY_PIN, HIGH);
+      lcd.clear();
+      lcd.print("Door Locked");
+      isDoorOpen = false;
     }
-    // Sau khi hoàn thành, hiển thị thông báo reset và chờ một lúc rồi bắt đầu lại quá trình đăng nhập
-    lcd.clear();
-    lcd.print("Restarting...");
-    delay(1000);
+    else {
+      digitalWrite(RELAY_PIN, LOW);
+      lcd.clear();
+      lcd.print("Door Unlocked");
+      isDoorOpen = true;
+      doorOpenTime = millis();
+    }
   }
+  
+  // Auto-lock door after 10 seconds if open.
+  if (isDoorOpen && (millis() - doorOpenTime >= 10000)) {
+    digitalWrite(RELAY_PIN, HIGH);
+    lcd.clear();
+    lcd.print("Door Auto Locked");
+    isDoorOpen = false;
+  }
+  
+  // When door is closed, perform security check.
+  if (!isDoorOpen && !buttonPressed) {
+    if (securityCheck()) {
+      digitalWrite(RELAY_PIN, LOW);
+      lcd.clear();
+      lcd.print("Access Granted");
+      lcd.setCursor(0, 1);
+      lcd.print("Door Unlocked");
+      isDoorOpen = true;
+      sendLightDataToWeb();
+      promptResetAndAddFingerprint();
+      resetPasswordPrompt();
+      doorOpenTime = millis();
+    }
+  }
+  
+  // Periodically send light data.
+  sendLightDataToWeb();
 }
