@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Light Data Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {}
+      }
+    }
+  </script>
+  <style>
+    body {
+      transition: background-color 0.3s, color 0.3s;
+    }
+    #chartContainer {
+      position: relative;
+      height: 250px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">Light Data Dashboard</h1>
+      <div class="flex items-center gap-4">
+        <button id="logoutBtn" class="flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <a href="{{ url_for('logout') }}" 
+             class="inline-flex items-center gap-2 rounded-md border border-gray-300                     dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm                       font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            Đăng xuất
+          </a>
+        </button>
+        <button id="themeToggle" class="rounded-full h-10 w-10 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+          </svg>
+          <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="hidden">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2"/>
+            <path d="M12 20v2"/>
+            <path d="M4.93 4.93l1.41 1.41"/>
+            <path d="M17.66 17.66l1.41 1.41"/>
+            <path d="M2 12h2"/>
+            <path d="M20 12h2"/>
+            <path d="M6.34 17.66l-1.41 1.41"/>
+            <path d="M19.07 4.93l-1.41 1.41"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Chart Card -->
+    <div class="mb-8 bg-white dark:bg-gray-900 rounded-lg shadow-md border border-gray-200 dark:border-gray-800">
+      <div class="p-4 border-b border-gray-200 dark:border-gray-800">
+        <div class="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <h2 class="text-xl font-semibold">Light Intensity (Last 10 Readings) - <span id="presenceStatus" class="text-red-500">Checking...</span></h2>
+            <p class="text-gray-500 dark:text-gray-400">Monitoring latest light levels</p>
+          </div>
+          <!-- <div id="lastLogin" class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Last login: March 20, 2025, 4:30 AM</span>
+          </div> -->
+        </div>
+      </div>
+      <div class="p-4">
+        <div id="chartContainer">
+          <canvas id="lightChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metric Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <!-- Current Reading Card -->
+      <div class="bg-white dark:bg-gray-900 rounded-lg shadow-md border border-gray-200 dark:border-gray-800">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-800">
+          <h2 class="text-lg font-bold text-gray-800 dark:text-white">Current Reading</h2>
+          <p class="text-gray-500 dark:text-gray-400">Latest light intensity</p>
+        </div>
+        <div class="p-4">
+          <p id="currentReading" class="text-4xl font-bold text-gray-800 dark:text-white">-- lux</p>
+        </div>
+      </div>
+
+      <!-- Average Card -->
+      <div class="bg-white dark:bg-gray-900 rounded-lg shadow-md border border-gray-200 dark:border-gray-800">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-800">
+          <h2 class="text-lg font-bold text-gray-800 dark:text-white">Average</h2>
+          <p class="text-gray-500 dark:text-gray-400">Mean light intensity</p>
+        </div>
+        <div class="p-4">
+          <p id="averageReading" class="text-4xl font-bold text-gray-800 dark:text-white">-- lux</p>
+        </div>
+      </div>
+
+      <!-- Peak Card -->
+      <div class="bg-white dark:bg-gray-900 rounded-lg shadow-md border border-gray-200 dark:border-gray-800">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-800">
+          <h2 class="text-lg font-bold text-gray-800 dark:text-white">Peak</h2>
+          <p class="text-gray-500 dark:text-gray-400">Maximum light intensity</p>
+        </div>
+        <div class="p-4">
+          <p id="peakReading" class="text-4xl font-bold text-gray-800 dark:text-white">-- lux</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <div class="flex justify-center">
+      <button id="refreshBtn" class="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 px-4 py-2 rounded-md transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2v6h-6"/>
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+          <path d="M3 22v-6h6"/>
+          <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>
+        <span>Refresh Data</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let lightChart;
+
+    // Khởi tạo Chart.js
+    function initChart(labels = [], values = []) {
+      const ctx = document.getElementById('lightChart').getContext('2d');
+      lightChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Light Intensity',
+            data: values,
+            borderColor: document.documentElement.classList.contains('dark') ? 'white' : 'rgb(107, 114, 128)',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointBackgroundColor: document.documentElement.classList.contains('dark') ? 'white' : 'rgb(107, 114, 128)',
+            pointRadius: 4,
+            pointHoverRadius: 7,
+            tension: 0.2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: document.documentElement.classList.contains('dark') ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+              titleColor: document.documentElement.classList.contains('dark') ? 'white' : 'black',
+              bodyColor: document.documentElement.classList.contains('dark') ? 'white' : 'black',
+              borderColor: document.documentElement.classList.contains('dark') ? '#444' : '#ddd',
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 4,
+              displayColors: false,
+              callbacks: {
+                label: function(context) {
+                  return `${context.parsed.y} lux`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)'
+              }
+            },
+            y: {
+              grid: {
+                color: document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+              },
+              ticks: {
+                color: document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Cập nhật màu cho chart khi chuyển dark/light
+    function updateChartTheme() {
+      if (!lightChart) return;
+      lightChart.data.datasets[0].borderColor = document.documentElement.classList.contains('dark') ? 'white' : 'rgb(107, 114, 128)';
+      lightChart.data.datasets[0].pointBackgroundColor = document.documentElement.classList.contains('dark') ? 'white' : 'rgb(107, 114, 128)';
+      lightChart.options.scales.x.ticks.color = document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+      lightChart.options.scales.y.ticks.color = document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+      lightChart.options.scales.y.grid.color = document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+      lightChart.options.plugins.tooltip.backgroundColor = document.documentElement.classList.contains('dark') ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+      lightChart.options.plugins.tooltip.titleColor = document.documentElement.classList.contains('dark') ? 'white' : 'black';
+      lightChart.options.plugins.tooltip.bodyColor = document.documentElement.classList.contains('dark') ? 'white' : 'black';
+      lightChart.options.plugins.tooltip.borderColor = document.documentElement.classList.contains('dark') ? '#444' : '#ddd';
+      lightChart.update();
+    }
+
+    // Hàm fetch dữ liệu từ /api/sensor_data (chỉ dùng value, bỏ timestamp)
+    function fetchSensorData() {
+      fetch('/api/sensor_data')
+        .then(response => response.json())
+        .then(data => {
+          const last10 = data.slice(-10);
+          const labels = last10.map(() => '');
+          const values = last10.map(entry => Number(entry.value));
+
+          if (!lightChart) {
+            initChart(labels, values);
+          } else {
+            lightChart.data.labels = labels;
+            lightChart.data.datasets[0].data = values;
+            lightChart.update();
+          }
+
+          if (values.length > 0) {
+            const currentValue = values[values.length - 1];
+            document.getElementById('currentReading').textContent = `${currentValue} lux`;
+
+            const avg = Math.round(values.reduce((acc, val) => acc + val, 0) / values.length);
+            document.getElementById('averageReading').textContent = `${avg} lux`;
+
+            const peak = Math.max(...values);
+            document.getElementById('peakReading').textContent = `${peak} lux`;
+
+            // Cập nhật trạng thái có người trong nhà hay không
+            const presenceStatus = document.getElementById('presenceStatus');
+            if (currentValue < 100) {
+              presenceStatus.textContent = "";
+              presenceStatus.classList.remove("text-green-500");
+              presenceStatus.classList.add("text-red-500");
+            } else {
+              presenceStatus.textContent = "";
+              presenceStatus.classList.remove("text-red-500");
+              presenceStatus.classList.add("text-green-500");
+            }
+          }
+        })
+        .catch(error => console.error("Error fetching sensor data:", error));
+    }
+
+
+
+    // Tự động cập nhật dữ liệu mỗi 5 giây
+    setInterval(fetchSensorData, 1000);
+
+    // Nút Refresh Data
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+      fetchSensorData();
+      const now = new Date();
+      document.querySelector('#lastLogin span').textContent = `Last login: ${now.toLocaleString()}`;
+    });
+
+    // Dark mode toggle
+    let isDarkMode = false;
+    const themeToggle = document.getElementById('themeToggle');
+    const moonIcon = document.getElementById('moonIcon');
+    const sunIcon = document.getElementById('sunIcon');
+
+    themeToggle.addEventListener('click', function() {
+      isDarkMode = !isDarkMode;
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        document.body.classList.add('dark:bg-black', 'dark:text-white');
+        moonIcon.classList.add('hidden');
+        sunIcon.classList.remove('hidden');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.body.classList.remove('dark:bg-black', 'dark:text-white');
+        moonIcon.classList.remove('hidden');
+        sunIcon.classList.add('hidden');
+      }
+      updateChartTheme();
+    });
+
+    // Khi trang load xong, gọi fetchSensorData lần đầu
+    document.addEventListener('DOMContentLoaded', function() {
+      fetchSensorData();
+    });
+
+  </script>
+</body>
+</html>

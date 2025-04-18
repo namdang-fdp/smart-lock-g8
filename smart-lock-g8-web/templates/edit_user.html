@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sửa Thông Tin Người Dùng</title>
+    <style>
+      :root {
+        --primary-color: #4361ee;
+        --primary-hover: #3a56d4;
+        --secondary-color: #f8f9fa;
+        --text-color: #333;
+        --text-secondary: #555;
+        --background-color: #f5f7fb;
+        --card-background: white;
+        --border-color: #ddd;
+        --success-color: #2ecc71;
+        --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      
+      .dark-theme {
+        --primary-color: #6c8eff;
+        --primary-hover: #5a7dff;
+        --secondary-color: #2d3748;
+        --text-color: #e2e8f0;
+        --text-secondary: #cbd5e0;
+        --background-color: #1a202c;
+        --card-background: #2d3748;
+        --border-color: #4a5568;
+        --success-color: #48bb78;
+        --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+      
+      body {
+        background-color: var(--background-color);
+        color: var(--text-color);
+        line-height: 1.6;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        transition: background-color 0.3s ease;
+      }
+      
+      .container {
+        background-color: var(--card-background);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        width: 100%;
+        max-width: 500px;
+        padding: 30px;
+        position: relative;
+        overflow: hidden;
+        transition: background-color 0.3s ease, box-shadow 0.3s ease;
+      }
+      
+      .container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 5px;
+        background: var(--primary-color);
+        transition: background-color 0.3s ease;
+      }
+      
+      h1 {
+        color: var(--primary-color);
+        margin-bottom: 25px;
+        font-size: 1.8rem;
+        font-weight: 600;
+        text-align: center;
+        transition: color 0.3s ease;
+      }
+      
+      .form-group {
+        margin-bottom: 20px;
+      }
+      
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: color 0.3s ease;
+      }
+      
+      input, select {
+        width: 100%;
+        padding: 12px 15px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 16px;
+        transition: all 0.3s ease;
+        background-color: var(--card-background);
+        color: var(--text-color);
+      }
+      
+      input:focus, select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+      }
+      
+      select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 15px center;
+        background-size: 16px;
+        padding-right: 40px;
+      }
+      
+      .dark-theme select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      }
+      
+      button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 12px 20px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        width: 100%;
+        transition: background-color 0.3s ease;
+        margin-top: 10px;
+      }
+      
+      button:hover {
+        background-color: var(--primary-hover);
+      }
+      
+      .back-link {
+        display: block;
+        text-align: center;
+        margin-top: 20px;
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.3s ease;
+      }
+      
+      .back-link:hover {
+        color: var(--primary-hover);
+        text-decoration: underline;
+      }
+      
+      /* Theme Toggle Button */
+      .theme-toggle {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: none;
+        border: none;
+        width: 32px;
+        height: 32px;
+        padding: 4px;
+        margin: 0;
+        cursor: pointer;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.3s ease;
+      }
+      
+      .theme-toggle:hover {
+        background-color: rgba(0, 0, 0, 0.1);
+      }
+      
+      .dark-theme .theme-toggle:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+      
+      .theme-toggle-icon {
+        width: 20px;
+        height: 20px;
+        fill: var(--text-secondary);
+        transition: fill 0.3s ease;
+      }
+      
+      @media (max-width: 600px) {
+        .container {
+          padding: 20px;
+          margin: 0 10px;
+        }
+        
+        h1 {
+          font-size: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode">
+        <svg class="theme-toggle-icon" id="moonIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+        <svg class="theme-toggle-icon" id="sunIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display: none;">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+      
+      <h1>Sửa Thông Tin Cho User: {{ username }}</h1>
+      <form action="{{ url_for('edit_user', username=username) }}" method="post">
+        <div class="form-group">
+          <label for="password">Mật khẩu mới:</label>
+          <input type="password" id="password" name="password" value="{{ user.password }}" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="role">Vai trò:</label>
+          <select id="role" name="role">
+            <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+          </select>
+        </div>
+        
+        <button type="submit">Cập nhật</button>
+      </form>
+      <a href="{{ url_for('admin') }}" class="back-link">Trở lại trang quản trị</a>
+    </div>
+
+    <script>
+      // Theme toggle functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const themeToggle = document.getElementById('themeToggle');
+        const moonIcon = document.getElementById('moonIcon');
+        const sunIcon = document.getElementById('sunIcon');
+        
+        // Check for saved theme preference or use preferred color scheme
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        // Apply the saved theme or use system preference
+        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+          document.body.classList.add('dark-theme');
+          moonIcon.style.display = 'none';
+          sunIcon.style.display = 'block';
+        }
+        
+        // Toggle theme when button is clicked
+        themeToggle.addEventListener('click', function() {
+          document.body.classList.toggle('dark-theme');
+          
+          // Toggle icon
+          if (document.body.classList.contains('dark-theme')) {
+            moonIcon.style.display = 'none';
+            sunIcon.style.display = 'block';
+            localStorage.setItem('theme', 'dark');
+          } else {
+            moonIcon.style.display = 'block';
+            sunIcon.style.display = 'none';
+            localStorage.setItem('theme', 'light');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
